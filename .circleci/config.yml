@@ -1,0 +1,60 @@
+version: 2.1
+
+orbs:
+  aws-cli: circleci/aws-cli@3.1
+  python: circleci/python@2.1
+
+jobs:
+  build-and-test:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - checkout
+      - python/install-packages:
+          pkg-manager: pip
+          packages:
+            - pytest
+            - boto3
+      - run:
+          name: Run tests
+          command: pytest
+
+  deploy:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - checkout
+      - aws-cli/setup:
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          aws-region: AWS_REGION
+      - run:
+          name: Install AWS SAM CLI
+          command: |
+            curl -L https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip -o sam.zip
+            unzip sam.zip -d sam-installation
+            sudo ./sam-installation/install
+            sam --version
+      - run:
+          name: SAM build
+          command: sam build
+      - run:
+          name: SAM deploy
+          command: |
+            sam deploy \
+              --stack-name hello-world-lambda \
+              --capabilities CAPABILITY_IAM \
+              --no-confirm-changeset \
+              --no-fail-on-empty-changeset
+
+workflows:
+  version: 2
+  build-test-deploy:
+    jobs:
+      - build-and-test
+      - deploy:
+          requires:
+            - build-and-test
+          filters:
+            branches:
+              only: main
